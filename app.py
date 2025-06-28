@@ -1,33 +1,24 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from shared.watsonx import watsonx_classify
-from fastapi import FastAPI, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from services.classifier import classify_pdf
-from services.codegen import generate_code
+import streamlit as st
+import requests
 
+st.set_page_config(page_title="SmartSDLC", layout="centered")
+st.title("SmartSDLC Dashboard")
 
-app = FastAPI()
+st.subheader("Upload PDF Requirements")
+uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+if uploaded_file:
+    with st.spinner("Classifying requirements..."):
+        res = requests.post("http://localhost:8000/classify", files={"file": uploaded_file})
+        if res.status_code == 200:
+            output = res.json()
+            for phase, items in output.items():
+                st.markdown(f"### {phase}")
+                for line in items:
+                    st.write("-", line)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.post("/classify")
-async def classify(file: UploadFile = File(...)):
-    content = await file.read()
-    result = classify_pdf(content)
-    return result
-
-@app.post("/codegen")
-async def codegen(prompt: dict):
-    try:
-        code = generate_code(prompt["prompt"])
-        return {"code": code}
-    except Exception as e:
-        return {"error": str(e)}
-
+st.subheader("AI Code Generator")
+prompt = st.text_area("Enter requirement prompt")
+if st.button("Generate Code") and prompt:
+    with st.spinner("Generating code..."):
+        res = requests.post("http://localhost:8000/codegen", json={"prompt": prompt})
+        st.code(res.json().get("code"))
